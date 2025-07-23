@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface CoinAnimation {
   id: number;
@@ -45,7 +45,7 @@ export default function Home() {
   const earningsPerSecond = calculateEarningsPerSecond();
 
   // Create coin drop animation
-  const createCoinAnimation = () => {
+  const createCoinAnimation = useCallback(() => {
     if (!animationEnabled) return;
     
     const newCoins: CoinAnimation[] = [];
@@ -63,7 +63,7 @@ export default function Home() {
     
     // Play realistic coin drop sound using Web Audio API (only if animation is enabled)
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       
       // Create multiple oscillators for a richer coin sound
       const oscillator1 = audioContext.createOscillator();
@@ -128,7 +128,7 @@ export default function Home() {
       oscillator2.stop(startTime + 0.4);
       oscillator3.stop(startTime + 0.45);
       
-    } catch (error) {
+    } catch {
       // Fallback if Web Audio API fails
       console.log('Audio playback not available');
     }
@@ -137,7 +137,7 @@ export default function Home() {
     setTimeout(() => {
       setCoinAnimations(prev => prev.filter(coin => !newCoins.some(newCoin => newCoin.id === coin.id)));
     }, 10000);
-  };
+  }, [animationEnabled]);
 
   // Start/stop work timer
   useEffect(() => {
@@ -169,7 +169,7 @@ export default function Home() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isWorking, earningsPerSecond, animationEnabled]);
+  }, [isWorking, earningsPerSecond, createCoinAnimation]);
 
 
 
