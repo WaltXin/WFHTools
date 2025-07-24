@@ -17,6 +17,7 @@ export default function Home() {
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const coinIdRef = useRef(0);
+  const startWorkTimeRef = useRef<number | null>(null);
 
   // Calculate earnings per second
   const calculateEarningsPerSecond = () => {
@@ -171,12 +172,107 @@ export default function Home() {
     };
   }, [isWorking, earningsPerSecond, createCoinAnimation]);
 
+  // Handle page visibility change to calculate earnings while away
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden - save current time and state
+        if (isWorking && earningsPerSecond > 0) {
+          localStorage.setItem('lastActiveTime', Date.now().toString());
+          localStorage.setItem('wasWorking', 'true');
+          localStorage.setItem('earningsPerSecond', earningsPerSecond.toString());
+        }
+      } else {
+        // Page is visible again - calculate earnings while away
+        const lastTime = localStorage.getItem('lastActiveTime');
+        const wasWorking = localStorage.getItem('wasWorking') === 'true';
+        const storedEarningsPerSecond = parseFloat(localStorage.getItem('earningsPerSecond') || '0');
+        
+        if (lastTime && wasWorking && isWorking && storedEarningsPerSecond > 0) {
+          const timeDiff = (Date.now() - parseInt(lastTime)) / 1000; // seconds
+          const earnedWhileAway = timeDiff * storedEarningsPerSecond;
+          
+          if (earnedWhileAway > 0) {
+            setCurrentEarnings(prev => {
+              const newTotal = prev + earnedWhileAway;
+              
+              // Check if we should trigger coin animations for the earned amount
+              if (animationEnabled) {
+                const coinsToShow = Math.floor(earnedWhileAway / 10);
+                for (let i = 0; i < Math.min(coinsToShow, 10); i++) { // Limit to 10 coin bursts
+                  setTimeout(() => createCoinAnimation(), i * 200); // Stagger the animations
+                }
+              }
+              
+              return newTotal;
+            });
+          }
+        }
+        
+        // Clear stored values
+        localStorage.removeItem('lastActiveTime');
+        localStorage.removeItem('wasWorking');
+        localStorage.removeItem('earningsPerSecond');
+      }
+    };
 
+    const handleBeforeUnload = () => {
+      // Also save when user leaves the website entirely
+      if (isWorking && earningsPerSecond > 0) {
+        localStorage.setItem('lastActiveTime', Date.now().toString());
+        localStorage.setItem('wasWorking', 'true');
+        localStorage.setItem('earningsPerSecond', earningsPerSecond.toString());
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isWorking, earningsPerSecond, animationEnabled, createCoinAnimation]);
+
+  // Check for earnings while away on page load
+  useEffect(() => {
+    const checkAwayEarnings = () => {
+      const lastTime = localStorage.getItem('lastActiveTime');
+      const wasWorking = localStorage.getItem('wasWorking') === 'true';
+      const storedEarningsPerSecond = parseFloat(localStorage.getItem('earningsPerSecond') || '0');
+      
+      if (lastTime && wasWorking && storedEarningsPerSecond > 0) {
+        const timeDiff = (Date.now() - parseInt(lastTime)) / 1000; // seconds
+        const earnedWhileAway = timeDiff * storedEarningsPerSecond;
+        
+        if (earnedWhileAway > 0) {
+          setCurrentEarnings(prev => prev + earnedWhileAway);
+          
+          // Show notification about earnings while away
+          if (earnedWhileAway >= 1) {
+            console.log(`Welcome back! You earned $${earnedWhileAway.toFixed(2)} while away.`);
+          }
+        }
+        
+        // Clear stored values after processing
+        localStorage.removeItem('lastActiveTime');
+        localStorage.removeItem('wasWorking');
+        localStorage.removeItem('earningsPerSecond');
+      }
+    };
+
+    // Run check on mount
+    checkAwayEarnings();
+  }, []); // Empty dependency array - only run on mount
 
   const resetEarnings = () => {
     setCurrentEarnings(0);
     setIsWorking(false);
     setCoinAnimations([]);
+    // Clear any stored away-time data
+    localStorage.removeItem('lastActiveTime');
+    localStorage.removeItem('wasWorking');
+    localStorage.removeItem('earningsPerSecond');
   };
 
   // Toggle animation and clear existing coins when disabled
